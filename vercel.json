@@ -4,6 +4,10 @@
     {
       "src": "server.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "hippo.png",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -12,8 +16,8 @@
       "dest": "/server.js"
     },
     {
-      "src": "/(.*\\.(png|jpg|jpeg|gif|svg|css|js|ico))",
-      "dest": "/public/$1"
+      "src": "/hippo.png",
+      "dest": "/hippo.png"
     },
     {
       "src": "/",
