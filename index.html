@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hippo Fortune Teller</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background-color: #ebd3b5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 400px;
+            padding: 20px;
+        }
+        
+        .hippo-image {
+            width: 200px;
+            height: 200px;
+            margin-bottom: 30px;
+            border-radius: 20px;
+        }
+        
+        .message {
+            font-size: 18px;
+            color: #8b4513;
+            margin-bottom: 30px;
+            line-height: 1.4;
+            font-weight: 500;
+        }
+        
+        .voice-button {
+            background: linear-gradient(145deg, #ff9999, #ff7777);
+            border: none;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-size: 16px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 119, 119, 0.3);
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        .voice-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 119, 119, 0.4);
+        }
+        
+        .voice-button:active {
+            transform: translateY(0);
+        }
+        
+        .voice-button.recording {
+            background: linear-gradient(145deg, #ff4444, #cc3333);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .fortune-result {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.9); /* 稍微调整透明度以配合新背景 */
+            border-radius: 15px;
+            font-size: 16px;
+            color: #8b4513;
+            line-height: 1.5;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            display: none;
+            position: relative;
+        }
+        
+        .play-button {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.2s ease;
+            opacity: 0.6;
+        }
+        
+        .play-button:hover {
+            transform: scale(1.3);
+            opacity: 1;
+            color: #4CAF50;
+        }
+        
+        .play-button:active {
+            transform: scale(1.1);
+        }
+        
+        .play-button.loading {
+            color: #ff9800;
+            animation: spin 1s linear infinite;
+            opacity: 1;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 20px;
+            color: #8b4513;
+            font-style: italic;
+        }
+        
+        .error {
+            color: #cc3333;
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="hippo.png" alt="Sleepy Hippo" class="hippo-image">
+        
+        <div class="message">
+            Say 'emmm' and hear the Hippo whisper your future.
+        </div>
+        
+        <button id="voiceButton" class="voice-button">
+            🎤 Press to Speak
+        </button>
+        
+        <div id="loading" class="loading">
+            The hippo is contemplating your future...
+        </div>
+        
+        <div id="error" class="error"></div>
+        
+        <div id="fortuneResult" class="fortune-result">
+            <button id="playButton" class="play-button" title="Listen to your fortune">
+                ▶️
+            </button>
+            <div id="fortuneText"></div>
+        </div>
+    </div>
+
+    <script>
+        class HippoFortuneTeller {
+            constructor() {
+                this.recognition = null;
+                this.isRecording = false;
+                this.currentFortune = '';
+                this.audioContext = null;
+                this.currentAudio = null;
+                this.initSpeechRecognition();
+                this.bindEvents();
+            }
+            
+            initSpeechRecognition() {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.continuous = false;
+                    this.recognition.interimResults = false;
+                    this.recognition.lang = 'en-US';
+                    
+                    // 开始录音后2秒直接触发
+                    this.recognition.onstart = () => {
+                        setTimeout(() => {
+                            if (this.isRecording) {
+                                this.getFortune();
+                                this.stopRecording();
+                            }
+                        }, 2000);
+                    };
+                    
+                    // 如果提前识别到内容也触发
+                    this.recognition.onresult = (event) => {
+                        this.getFortune();
+                    };
+                    
+                    this.recognition.onerror = (event) => {
+                        this.showError('Speech recognition error. Please try again.');
+                        this.stopRecording();
+                    };
+                    
+                    this.recognition.onend = () => {
+                        this.stopRecording();
+                    };
+                } else {
+                    this.showError('Speech recognition is not supported in your browser.');
+                }
+            }
+            
+            bindEvents() {
+                const voiceButton = document.getElementById('voiceButton');
+                voiceButton.addEventListener('click', () => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startRecording();
+                    }
+                });
+                
+                const playButton = document.getElementById('playButton');
+                playButton.addEventListener('click', () => {
+                    this.playFortune();
+                });
+            }
+            
+            startRecording() {
+                if (!this.recognition) return;
+                
+                this.isRecording = true;
+                const button = document.getElementById('voiceButton');
+                button.textContent = '🛑 Stop Recording';
+                button.classList.add('recording');
+                
+                this.hideResults();
+                this.recognition.start();
+            }
+            
+            stopRecording() {
+                this.isRecording = false;
+                const button = document.getElementById('voiceButton');
+                button.textContent = '🎤 Press to Speak';
+                button.classList.remove('recording');
+                
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+            }
+            
+            handleSpeechResult(transcript) {
+                console.log('Recognized:', transcript);
+                if (transcript.includes('emmm') || transcript.includes('em') || transcript.includes('umm')) {
+                    this.getFortune();
+                } else {
+                    this.getFortune();
+                    //this.showError('The hippo only responds to "emmm". Try saying it!');
+                }
+            }
+            
+            async getFortune() {
+                this.showLoading();
+                
+                try {
+                    const response = await fetch('/api/fortune', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.currentFortune = data.fortune;
+                        this.showFortune(data.fortune);
+                    } else {
+                        this.showError(data.error || 'The hippo is taking a nap. Please try again later! 🦛💤');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error getting fortune:', error);
+                    this.showError('The hippo seems to be offline. Please try again later! 🦛📡');
+                }
+            }
+            
+            async playFortune() {
+                if (!this.currentFortune) return;
+                
+                const playButton = document.getElementById('playButton');
+                playButton.classList.add('loading');
+                playButton.innerHTML = '⏳';
+                
+                try {
+                    // 停止当前播放的音频
+                    if (this.currentAudio) {
+                        this.currentAudio.pause();
+                        this.currentAudio = null;
+                    }
+                    
+                    const response = await fetch('/api/tts', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ text: this.currentFortune })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to generate speech');
+                    }
+                    
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    this.currentAudio = new Audio(audioUrl);
+                    
+                    this.currentAudio.onplay = () => {
+                        playButton.innerHTML = '⏸️';
+                        playButton.classList.remove('loading');
+                    };
+                    
+                    this.currentAudio.onended = () => {
+                        playButton.innerHTML = '▶️';
+                        playButton.classList.remove('loading');
+                        URL.revokeObjectURL(audioUrl);
+                    };
+                    
+                    this.currentAudio.onerror = () => {
+                        playButton.innerHTML = '▶️';
+                        playButton.classList.remove('loading');
+                        this.showError('Failed to play audio. Please try again.');
+                        URL.revokeObjectURL(audioUrl);
+                    };
+                    
+                    await this.currentAudio.play();
+                    
+                } catch (error) {
+                    console.error('Error playing fortune:', error);
+                    playButton.innerHTML = '▶️';
+                    playButton.classList.remove('loading');
+                    this.showError('Failed to play audio. Please try again.');
+                }
+            }
+            
+            showLoading() {
+                document.getElementById('loading').style.display = 'block';
+                this.hideError();
+                this.hideFortune();
+            }
+            
+            showFortune(fortune) {
+                document.getElementById('fortuneText').textContent = fortune;
+                document.getElementById('fortuneResult').style.display = 'block';
+                this.hideLoading();
+                this.hideError();
+            }
+            
+            showError(message) {
+                document.getElementById('error').textContent = message;
+                document.getElementById('error').style.display = 'block';
+                this.hideLoading();
+                this.hideFortune();
+            }
+            
+            hideResults() {
+                this.hideLoading();
+                this.hideError();
+                this.hideFortune();
+            }
+            
+            hideLoading() {
+                document.getElementById('loading').style.display = 'none';
+            }
+            
+            hideError() {
+                document.getElementById('error').style.display = 'none';
+            }
+            
+            hideFortune() {
+                document.getElementById('fortuneResult').style.display = 'none';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            new HippoFortuneTeller();
+        });
+    </script>
+</body>
+</html>
