@@ -12,19 +12,11 @@
       "dest": "/server.js"
     },
     {
-      "src": "/hippo.png",
-      "dest": "/hippo.png"
-    },
-    {
       "src": "/(.*\\.(png|jpg|jpeg|gif|svg|css|js|ico))",
-      "dest": "/$1"
+      "dest": "/public/$1"
     },
     {
       "src": "/",
-      "dest": "/server.js"
-    },
-    {
-      "src": "/(.*)",
       "dest": "/server.js"
     }
   ]

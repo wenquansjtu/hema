@@ -16,7 +16,8 @@ const openai = new OpenAI({
 // 中间件
 app.use(cors());
 app.use(express.json());
-app.use(express.static('.'));
+// 修改静态文件中间件配置
+app.use(express.static('public'));
 
 // 提供静态文件（HTML页面）
 app.get('/', (req, res) => {
