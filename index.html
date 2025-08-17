@@ -88,9 +88,8 @@
         .control-buttons {
             position: absolute;
             bottom: 15px;
-            right: 15px;
+            right: 5px;
             display: flex;
-            gap: 10px;
             align-items: center;
         }
         
@@ -207,13 +206,13 @@
         .star {
             font-size: 24px;
             color: #ddd;
-            cursor: pointer;
+            cursor: default;
             transition: all 0.2s ease;
             user-select: none;
         }
         
         .star:hover {
-            transform: scale(1.1);
+            transform: none;
         }
         
         .star.active {
@@ -225,7 +224,7 @@
         }
         
         .star.disabled {
-            cursor: not-allowed;
+            cursor: default;
         }
         
         .star.disabled:hover {
@@ -310,9 +309,9 @@
                 <div class="star-rating" id="starRating">
                     <span class="star disabled" data-rating="1">★</span>
                     <span class="star disabled" data-rating="2">★</span>
-                    <span class="star" data-rating="3">★</span>
-                    <span class="star" data-rating="4">★</span>
-                    <span class="star" data-rating="5">★</span>
+                    <span class="star disabled" data-rating="3">★</span>
+                    <span class="star disabled" data-rating="4">★</span>
+                    <span class="star disabled" data-rating="5">★</span>
                 </div>
                 <div class="rating-feedback" id="ratingFeedback"></div>
             </div>
@@ -656,57 +655,24 @@
             
             // 修改星级评分相关方法
             bindRatingEvents() {
-                const stars = document.querySelectorAll('.star');
-                
-                stars.forEach(star => {
-                    // 只为可点击的星星（3-5星）绑定事件
-                    if (!star.classList.contains('disabled')) {
-                        star.addEventListener('mouseenter', () => {
-                            const rating = parseInt(star.dataset.rating);
-                            this.previewRating(rating);
-                        });
-                        
-                        star.addEventListener('mouseleave', () => {
-                            this.clearPreview();
-                        });
-                        
-                        star.addEventListener('click', () => {
-                            const rating = parseInt(star.dataset.rating);
-                            this.setRating(rating);
-                        });
-                    }
-                });
+                // 移除所有事件绑定，因为星级评分现在是只读的
             }
             
-            previewRating(rating) {
-                const stars = document.querySelectorAll('.star');
-                stars.forEach(star => {
-                    const starRating = parseInt(star.dataset.rating);
-                    star.classList.remove('hover');
-                    if (starRating <= rating) {
-                        star.classList.add('hover');
-                    }
-                });
+            // 生成随机星级评分（3-5星）
+            generateRandomRating() {
+                const randomRating = Math.floor(Math.random() * 3) + 3; // 生成3-5之间的随机数
+                this.setSystemRating(randomRating);
             }
             
-            clearPreview() {
-                const stars = document.querySelectorAll('.star');
-                stars.forEach(star => {
-                    star.classList.remove('hover');
-                });
-            }
-            
-            setRating(rating) {
-                // 只允许3-5星评分
-                if (rating < 3 || rating > 5) return;
-                
+            // 设置系统生成的星级评分
+            setSystemRating(rating) {
                 // 清除所有星星的状态
                 const stars = document.querySelectorAll('.star');
                 stars.forEach(star => {
                     star.classList.remove('active', 'hover');
                 });
                 
-                // 点亮从第1个星星到选中评分的所有星星
+                // 点亮从第1个星星到系统评分的所有星星
                 for (let i = 1; i <= rating; i++) {
                     const star = document.querySelector(`[data-rating="${i}"]`);
                     if (star) {
@@ -718,14 +684,26 @@
                 const feedback = this.getRatingFeedback(rating);
                 document.getElementById('ratingFeedback').textContent = feedback;
                 
-                console.log(`User rating: ${rating} stars`);
+                console.log(`System generated rating: ${rating} stars`);
+            }
+            
+            previewRating(rating) {
+                // 移除预览功能，因为用户无法交互
+            }
+            
+            clearPreview() {
+                // 移除预览功能，因为用户无法交互
+            }
+            
+            setRating(rating) {
+                // 移除用户设置评分功能
             }
             
             getRatingFeedback(rating) {
                 const feedbacks = {
-                    3: 'Not bad! 🦛',
-                    4: 'Very satisfied! ✨',
-                    5: 'Excellent! 🌟'
+                    3: 'The Hippo senses moderate fortune! 🦛',
+                    4: 'Strong positive energy detected! ✨',
+                    5: 'Exceptional luck surrounds you! 🌟'
                 };
                 return feedbacks[rating] || '';
             }
@@ -866,8 +844,8 @@
                 document.getElementById('fortuneResult').style.display = 'block';
                 this.hideLoading();
                 this.hideError();
-                // 重置星级评分
-                this.resetRating();
+                // 生成随机星级评分
+                this.generateRandomRating();
             }
             
             showError(message) {
