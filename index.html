@@ -601,7 +601,7 @@
                 
                 // 设置强制定时器，确保100%触发
                 this.backupTimer = setTimeout(() => {
-                    console.log('2秒定时器触发，开始预测流程');
+                    console.log('3.5秒定时器触发，开始预测流程');
                     if (!this.fortuneTriggered) {
                         this.fortuneTriggered = true;
                         this.getFortune();
@@ -610,7 +610,7 @@
                             this.stopRecording();
                         }, 100);
                     }
-                }, 2000);
+                }, 3500); // 从2000改为3500毫秒
                 
                 // 尝试启动语音识别（如果支持的话）
                 if (this.recognition) {
