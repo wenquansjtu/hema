@@ -487,19 +487,26 @@
                     this.recognition.interimResults = false;
                     this.recognition.lang = 'en-US';
                     
-                    // 开始录音后2秒直接触发
+                    // 添加标志位防止重复触发
+                    this.fortuneTriggered = false;
+                    
+                    // 开始录音后2秒直接触发预测
                     this.recognition.onstart = () => {
+                        this.fortuneTriggered = false; // 重置标志位
                         setTimeout(() => {
-                            if (this.isRecording) {
+                            if (this.isRecording && !this.fortuneTriggered) {
+                                this.fortuneTriggered = true;
                                 this.getFortune();
                                 this.stopRecording();
                             }
                         }, 2000);
                     };
                     
-                    // 如果提前识别到内容也触发
+                    // 移除语音识别结果的自动触发，只保留2秒定时器触发
                     this.recognition.onresult = (event) => {
-                        this.getFortune();
+                        // 不再自动触发预测，只记录识别结果（如果需要的话）
+                        const transcript = event.results[0][0].transcript;
+                        console.log('Speech recognized:', transcript);
                     };
                     
                     this.recognition.onerror = (event) => {
