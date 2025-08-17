@@ -526,6 +526,12 @@
                 
                 voiceButton.addEventListener('click', () => {
                     if (this.isRecording) {
+                        // 如果预测还没触发，显示提示而不是直接停止
+                        if (!this.fortuneTriggered) {
+                            console.log('请等待预测完成...');
+                            // 可以选择显示一个提示消息
+                            return;
+                        }
                         this.stopRecording();
                     } else {
                         this.startRecording();
@@ -721,69 +727,79 @@
             }
             
             startRecording() {
-                if (!this.recognition) {
-                    // 即使没有语音识别支持，也要设置备用定时器
-                    this.isRecording = true;
-                    this.fortuneTriggered = false;
-                    const button = document.getElementById('voiceButton');
-                    button.textContent = '🛑 Stop Recording';
-                    button.classList.add('recording');
-                    
-                    this.hideResults();
-                    
-                    // 设置备用定时器
-                    this.backupTimer = setTimeout(() => {
-                        if (this.isRecording && !this.fortuneTriggered) {
-                            this.fortuneTriggered = true;
-                            this.getFortune();
-                            this.stopRecording();
-                        }
-                    }, 2000);
+                // 如果已经在录音中，直接返回避免重复触发
+                if (this.isRecording) {
                     return;
                 }
                 
+                console.log('开始录音流程');
                 this.isRecording = true;
-                this.fortuneTriggered = false; // 重置标志位
+                this.fortuneTriggered = false;
+                
                 const button = document.getElementById('voiceButton');
                 button.textContent = '🛑 Stop Recording';
                 button.classList.add('recording');
                 
                 this.hideResults();
                 
-                // 添加备用定时器，确保即使麦克风失败也能在2秒后触发预测
-                this.backupTimer = setTimeout(() => {
-                    if (this.isRecording && !this.fortuneTriggered) {
-                        this.fortuneTriggered = true;
-                        this.getFortune();
-                        this.stopRecording();
-                    }
-                }, 2000);
-                
-                try {
-                    this.recognition.start();
-                } catch (error) {
-                    console.log('麦克风启动失败，但将继续预测流程:', error);
-                    // 即使麦克风失败，备用定时器仍会在2秒后触发预测
-                }
-            }
-            
-            stopRecording() {
-                this.isRecording = false;
-                const button = document.getElementById('voiceButton');
-                button.textContent = '🎤 Press to Speak';
-                button.classList.remove('recording');
-                
-                // 清除备用定时器
+                // 清除之前可能存在的定时器
                 if (this.backupTimer) {
                     clearTimeout(this.backupTimer);
                     this.backupTimer = null;
                 }
                 
+                // 设置强制定时器，确保100%触发
+                this.backupTimer = setTimeout(() => {
+                    console.log('2秒定时器触发，开始预测流程');
+                    if (!this.fortuneTriggered) {
+                        this.fortuneTriggered = true;
+                        this.getFortune();
+                        // 延迟停止录音，确保预测流程已经开始
+                        setTimeout(() => {
+                            this.stopRecording();
+                        }, 100);
+                    }
+                }, 2000);
+                
+                // 尝试启动语音识别（如果支持的话）
+                if (this.recognition) {
+                    try {
+                        this.recognition.start();
+                        console.log('语音识别已启动');
+                    } catch (error) {
+                        console.log('麦克风启动失败，但定时器仍会触发预测:', error);
+                    }
+                } else {
+                    console.log('不支持语音识别，将依赖定时器触发预测');
+                }
+            }
+            
+            stopRecording() {
+                // 如果预测还没有触发，不要停止录音状态
+                if (this.isRecording && !this.fortuneTriggered) {
+                    console.log('预测尚未触发，保持录音状态');
+                    return;
+                }
+                
+                console.log('停止录音流程');
+                this.isRecording = false;
+                
+                const button = document.getElementById('voiceButton');
+                button.textContent = '🎤 Press to Speak';
+                button.classList.remove('recording');
+                
+                // 清除定时器
+                if (this.backupTimer) {
+                    clearTimeout(this.backupTimer);
+                    this.backupTimer = null;
+                }
+                
+                // 停止语音识别
                 if (this.recognition) {
                     try {
                         this.recognition.stop();
                     } catch (error) {
-                        console.log('停止录音时出错:', error);
+                        console.log('停止语音识别时出错:', error);
                     }
                 }
             }
