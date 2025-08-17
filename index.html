@@ -74,7 +74,7 @@
         .fortune-result {
             margin-top: 30px;
             padding: 20px;
-            background: rgba(255, 255, 255, 0.9); /* 稍微调整透明度以配合新背景 */
+            background: rgba(255, 255, 255, 0.9);
             border-radius: 15px;
             font-size: 16px;
             color: #8b4513;
@@ -84,10 +84,17 @@
             position: relative;
         }
         
-        .play-button {
+        /* 新增：控制按钮容器样式 */
+        .control-buttons {
             position: absolute;
             bottom: 15px;
             right: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .play-button {
             background: none;
             border: none;
             width: 32px;
@@ -100,6 +107,7 @@
             color: #666;
             transition: all 0.2s ease;
             opacity: 0.6;
+            border-radius: 50%;
         }
         
         .play-button:hover {
@@ -123,6 +131,17 @@
             100% { transform: rotate(360deg); }
         }
         
+        .share-button.loading {
+            color: #ff9800;
+            animation: spin 1s linear infinite;
+            opacity: 1;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         .loading {
             display: none;
             margin-top: 20px;
@@ -134,6 +153,93 @@
             color: #cc3333;
             margin-top: 20px;
             display: none;
+        }
+        
+        /* 修改星级评分样式 */
+        .rating-container {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+        }
+        
+        .rating-title {
+            font-size: 14px;
+            color: #8b4513;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .star-rating {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+        }
+        
+        .star {
+            font-size: 24px;
+            color: #ddd;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        
+        .star:hover {
+            transform: scale(1.1);
+        }
+        
+        .star.active {
+            color: #ffd700;
+        }
+        
+        .star.hover {
+            color: #ffed4e;
+        }
+        
+        .star.disabled {
+            cursor: not-allowed;
+        }
+        
+        .star.disabled:hover {
+            transform: none;
+        }
+        
+        /* 新增：当disabled的星星被激活时，恢复正常显示 */
+        .star.disabled.active {
+            opacity: 1;
+            color: #ffd700;
+        }
+        
+        .star.disabled.hover {
+            opacity: 1;
+            color: #ffed4e;
+        }
+        
+        .rating-feedback {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            min-height: 16px;
+        }
+        
+        /* 新增：截图提示样式 */
+        .screenshot-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .screenshot-toast.show {
+            opacity: 1;
         }
     </style>
 </head>
@@ -157,10 +263,26 @@
         <div id="error" class="error"></div>
         
         <div id="fortuneResult" class="fortune-result">
-            <button id="playButton" class="play-button" title="Listen to your fortune">
-                ▶️
-            </button>
+            <!-- 只保留播放按钮 -->
+            <div class="control-buttons">
+                <button id="playButton" class="play-button" title="Listen to your fortune">
+                    ▶️
+                </button>
+            </div>
             <div id="fortuneText"></div>
+            
+            <!-- 星级评分组件 -->
+            <div class="rating-container">
+                <div class="rating-title">Hippo Luck Meter</div>
+                <div class="star-rating" id="starRating">
+                    <span class="star disabled" data-rating="1">★</span>
+                    <span class="star disabled" data-rating="2">★</span>
+                    <span class="star" data-rating="3">★</span>
+                    <span class="star" data-rating="4">★</span>
+                    <span class="star" data-rating="5">★</span>
+                </div>
+                <div class="rating-feedback" id="ratingFeedback"></div>
+            </div>
         </div>
     </div>
 
@@ -174,6 +296,244 @@
                 this.currentAudio = null;
                 this.initSpeechRecognition();
                 this.bindEvents();
+            }
+            
+            // 检查OAuth回调
+            checkAuthCallback() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const twitterAuth = urlParams.get('twitter_auth');
+                const error = urlParams.get('error');
+                
+                if (twitterAuth === 'success') {
+                    this.showScreenshotToast('✅ Twitter账号连接成功！');
+                    // 清理URL参数
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else if (error) {
+                    this.showScreenshotToast('❌ Twitter认证失败，请重试');
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+            
+            // 监听Twitter认证消息
+            setupAuthMessageListener() {
+                window.addEventListener('message', async (event) => {
+                    if (event.origin !== window.location.origin) {
+                        return;
+                    }
+                    
+                    if (event.data.type === 'TWITTER_AUTH_SUCCESS') {
+                        console.log('Twitter认证成功，开始自动分享');
+                        this.showScreenshotToast('✅ Twitter账号连接成功！正在分享...');
+                        
+                        // 关闭认证窗口
+                        if (this.authWindowRef && !this.authWindowRef.closed) {
+                            this.authWindowRef.close();
+                        }
+                        
+                        // 等待一小段时间确保认证完成
+                        setTimeout(async () => {
+                            await this.performTwitterShare();
+                        }, 1000);
+                    } else if (event.data.type === 'TWITTER_AUTH_FAILED') {
+                        console.log('Twitter认证失败');
+                        this.showScreenshotToast('❌ Twitter账号连接失败，请重试');
+                        
+                        // 关闭认证窗口
+                        if (this.authWindowRef && !this.authWindowRef.closed) {
+                            this.authWindowRef.close();
+                        }
+                    }
+                });
+            }
+            
+            // 执行Twitter分享
+            // 修改 performTwitterShare 函数
+            async performTwitterShare() {
+                try {
+                    // 使用html2canvas库进行截图
+                    if (typeof html2canvas === 'undefined') {
+                        await this.loadHtml2Canvas();
+                    }
+                    
+                    // 截图当前页面
+                    const canvas = await html2canvas(document.body, {
+                        backgroundColor: '#ebd3b5',
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: true,
+                        width: 375,
+                        height: 812,
+                        scrollX: 0,
+                        scrollY: 0
+                    });
+                    
+                    // 将canvas转换为base64
+                    const imageData = canvas.toDataURL('image/png', 0.9);
+                    
+                    // 准备分享文本
+                    const shareText = `🦛 The Hippo has spoken! My fortune: "${this.currentFortune}"\n\n#HippoFortune #Fortune #Wisdom`;
+                    
+                    // 调用Twitter分享API
+                    const response = await fetch('/api/share/twitter', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            imageData: imageData,
+                            text: shareText
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        this.showScreenshotToast('🎉 成功分享到Twitter！');
+                        // 打开推文链接
+                        setTimeout(() => {
+                            window.open(result.tweetUrl, '_blank');
+                        }, 1000);
+                    } else if (response.status === 401 && result.needsAuth) {
+                        // 需要Twitter授权
+                        this.showScreenshotToast('🔐 需要连接Twitter账号，正在跳转...');
+                        
+                        // 保存当前状态到localStorage，以便认证后恢复
+                        localStorage.setItem('pendingTwitterShare', JSON.stringify({
+                            imageData: imageData,
+                            text: shareText,
+                            fortune: this.currentFortune
+                        }));
+                        
+                        // 直接在当前页面跳转到Twitter认证
+                        window.location.href = result.authUrl;
+                    } else {
+                        throw new Error(result.error || '分享失败');
+                    }
+                } catch (error) {
+                    console.error('Twitter分享失败:', error);
+                    this.showScreenshotToast('❌ 分享失败，请重试');
+                }
+            }
+            
+            // 修改 checkAuthCallback 函数
+            checkAuthCallback() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const authStatus = urlParams.get('auth');
+                
+                if (authStatus === 'success') {
+                    // 认证成功，检查是否有待分享的内容
+                    const pendingShare = localStorage.getItem('pendingTwitterShare');
+                    if (pendingShare) {
+                        const shareData = JSON.parse(pendingShare);
+                        localStorage.removeItem('pendingTwitterShare');
+                        
+                        // 恢复fortune内容
+                        if (shareData.fortune) {
+                            this.currentFortune = shareData.fortune;
+                            this.showFortune(shareData.fortune);
+                        }
+                        
+                        // 执行分享
+                        this.performTwitterShareWithData(shareData.imageData, shareData.text);
+                    }
+                    
+                    // 清理URL参数
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else if (authStatus === 'failed') {
+                    this.showError('Twitter authentication failed. Please try again.');
+                    localStorage.removeItem('pendingTwitterShare');
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+            
+            async performTwitterShare() {
+                if (!this.currentFortune) {
+                    this.showError('No fortune to share!');
+                    return;
+                }
+                
+                try {
+                    // 确保html2canvas已加载
+                    if (typeof html2canvas === 'undefined') {
+                        await this.loadHtml2Canvas();
+                    }
+                    
+                    // 生成截图
+                    const canvas = await html2canvas(document.body, {
+                        backgroundColor: '#f0f8ff',
+                        scale: 2,
+                        useCORS: true
+                    });
+                    
+                    const imageData = canvas.toDataURL('image/png');
+                    const text = `🦛 Hippo Fortune: "${this.currentFortune}" \n\n#HippoWisdom #Fortune #AI`;
+                    
+                    // 尝试分享
+                    const response = await fetch('/api/share/twitter', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            imageData: imageData,
+                            text: text
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        this.showScreenshotToast('Successfully shared to Twitter! 🐦');
+                    } else if (response.status === 401 && result.needsAuth) {
+                        // 需要认证，保存分享数据并重定向
+                        const shareData = {
+                            imageData: imageData,
+                            text: text,
+                            fortune: this.currentFortune
+                        };
+                        localStorage.setItem('pendingTwitterShare', JSON.stringify(shareData));
+                        
+                        // 重定向到Twitter认证
+                        window.location.href = result.authUrl;
+                    } else {
+                        this.showError(result.error || 'Failed to share to Twitter');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error sharing to Twitter:', error);
+                    this.showError('Failed to share to Twitter. Please try again.');
+                }
+            }
+            
+            async performTwitterShareWithData(imageData, text) {
+                try {
+                    const response = await fetch('/api/share/twitter', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            imageData: imageData,
+                            text: text
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        this.showScreenshotToast('Successfully shared to Twitter! 🐦');
+                    } else {
+                        this.showError(result.error || 'Failed to share to Twitter');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error sharing to Twitter:', error);
+                    this.showError('Failed to share to Twitter. Please try again.');
+                }
+            }
+            
+            shareToX() {
+                this.performTwitterShare();
             }
             
             initSpeechRecognition() {
@@ -214,6 +574,9 @@
             
             bindEvents() {
                 const voiceButton = document.getElementById('voiceButton');
+                const playButton = document.getElementById('playButton');
+                const starRating = document.getElementById('starRating');
+                
                 voiceButton.addEventListener('click', () => {
                     if (this.isRecording) {
                         this.stopRecording();
@@ -222,10 +585,123 @@
                     }
                 });
                 
-                const playButton = document.getElementById('playButton');
                 playButton.addEventListener('click', () => {
                     this.playFortune();
                 });
+                
+                // 星级评分事件绑定
+                this.bindRatingEvents();
+            }
+            
+            // 删除这里的重复函数（第521-595行）
+            // async shareToX() { ... }
+            
+            // 新增：动态加载html2canvas库
+            loadHtml2Canvas() {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+            
+            // 新增：显示截图提示
+            // 修复showScreenshotToast函数
+            showScreenshotToast(message) {
+                const toast = document.getElementById('screenshotToast');
+                if (message) {
+                    toast.textContent = message;
+                }
+                toast.classList.add('show');
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }
+            
+            // 修改星级评分相关方法
+            bindRatingEvents() {
+                const stars = document.querySelectorAll('.star');
+                
+                stars.forEach(star => {
+                    // 只为可点击的星星（3-5星）绑定事件
+                    if (!star.classList.contains('disabled')) {
+                        star.addEventListener('mouseenter', () => {
+                            const rating = parseInt(star.dataset.rating);
+                            this.previewRating(rating);
+                        });
+                        
+                        star.addEventListener('mouseleave', () => {
+                            this.clearPreview();
+                        });
+                        
+                        star.addEventListener('click', () => {
+                            const rating = parseInt(star.dataset.rating);
+                            this.setRating(rating);
+                        });
+                    }
+                });
+            }
+            
+            previewRating(rating) {
+                const stars = document.querySelectorAll('.star');
+                stars.forEach(star => {
+                    const starRating = parseInt(star.dataset.rating);
+                    star.classList.remove('hover');
+                    if (starRating <= rating) {
+                        star.classList.add('hover');
+                    }
+                });
+            }
+            
+            clearPreview() {
+                const stars = document.querySelectorAll('.star');
+                stars.forEach(star => {
+                    star.classList.remove('hover');
+                });
+            }
+            
+            setRating(rating) {
+                // 只允许3-5星评分
+                if (rating < 3 || rating > 5) return;
+                
+                // 清除所有星星的状态
+                const stars = document.querySelectorAll('.star');
+                stars.forEach(star => {
+                    star.classList.remove('active', 'hover');
+                });
+                
+                // 点亮从第1个星星到选中评分的所有星星
+                for (let i = 1; i <= rating; i++) {
+                    const star = document.querySelector(`[data-rating="${i}"]`);
+                    if (star) {
+                        star.classList.add('active');
+                    }
+                }
+                
+                // 显示反馈信息
+                const feedback = this.getRatingFeedback(rating);
+                document.getElementById('ratingFeedback').textContent = feedback;
+                
+                console.log(`User rating: ${rating} stars`);
+            }
+            
+            getRatingFeedback(rating) {
+                const feedbacks = {
+                    3: 'Not bad! 🦛',
+                    4: 'Very satisfied! ✨',
+                    5: 'Excellent! 🌟'
+                };
+                return feedbacks[rating] || '';
+            }
+            
+            resetRating() {
+                const stars = document.querySelectorAll('.star');
+                stars.forEach(star => {
+                    star.classList.remove('active', 'hover');
+                });
+                document.getElementById('ratingFeedback').textContent = '';
             }
             
             startRecording() {
@@ -357,6 +833,8 @@
                 document.getElementById('fortuneResult').style.display = 'block';
                 this.hideLoading();
                 this.hideError();
+                // 新增：重置星级评分
+                this.resetRating();
             }
             
             showError(message) {
