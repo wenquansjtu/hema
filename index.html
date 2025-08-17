@@ -84,7 +84,7 @@
             position: relative;
         }
         
-        /* 新增：控制按钮容器样式 */
+        /* 控制按钮容器样式 */
         .control-buttons {
             position: absolute;
             bottom: 15px;
@@ -126,6 +126,39 @@
             opacity: 1;
         }
         
+        /* 新增：下载按钮样式 */
+        .download-button {
+            background: none;
+            border: none;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.2s ease;
+            opacity: 0.6;
+            border-radius: 50%;
+        }
+        
+        .download-button:hover {
+            transform: scale(1.3);
+            opacity: 1;
+            color: #2196F3;
+        }
+        
+        .download-button:active {
+            transform: scale(1.1);
+        }
+        
+        .download-button.loading {
+            color: #ff9800;
+            animation: spin 1s linear infinite;
+            opacity: 1;
+        }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -135,11 +168,6 @@
             color: #ff9800;
             animation: spin 1s linear infinite;
             opacity: 1;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
         
         .loading {
@@ -222,7 +250,7 @@
             min-height: 16px;
         }
         
-        /* 新增：截图提示样式 */
+        /* 截图提示样式 */
         .screenshot-toast {
             position: fixed;
             top: 20px;
@@ -244,8 +272,10 @@
     </style>
 </head>
 <body>
+    <!-- 截图提示Toast -->
+    <div id="screenshotToast" class="screenshot-toast"></div>
+    
     <div class="container">
-        <!-- 找到这行并修改 -->
         <img src="/hippo.png" alt="Sleepy Hippo" class="hippo-image">
         
         <div class="message">
@@ -263,10 +293,13 @@
         <div id="error" class="error"></div>
         
         <div id="fortuneResult" class="fortune-result">
-            <!-- 只保留播放按钮 -->
+            <!-- 控制按钮区域 -->
             <div class="control-buttons">
                 <button id="playButton" class="play-button" title="Listen to your fortune">
                     ▶️
+                </button>
+                <button id="downloadButton" class="download-button" title="Download screenshot">
+                    📥
                 </button>
             </div>
             <div id="fortuneText"></div>
@@ -296,6 +329,8 @@
                 this.currentAudio = null;
                 this.initSpeechRecognition();
                 this.bindEvents();
+                this.checkAuthCallback();
+                this.setupAuthMessageListener();
             }
             
             // 检查OAuth回调
@@ -347,7 +382,6 @@
             }
             
             // 执行Twitter分享
-            // 修改 performTwitterShare 函数
             async performTwitterShare() {
                 try {
                     // 使用html2canvas库进行截图
@@ -415,96 +449,6 @@
                 }
             }
             
-            // 修改 checkAuthCallback 函数
-            checkAuthCallback() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const authStatus = urlParams.get('auth');
-                
-                if (authStatus === 'success') {
-                    // 认证成功，检查是否有待分享的内容
-                    const pendingShare = localStorage.getItem('pendingTwitterShare');
-                    if (pendingShare) {
-                        const shareData = JSON.parse(pendingShare);
-                        localStorage.removeItem('pendingTwitterShare');
-                        
-                        // 恢复fortune内容
-                        if (shareData.fortune) {
-                            this.currentFortune = shareData.fortune;
-                            this.showFortune(shareData.fortune);
-                        }
-                        
-                        // 执行分享
-                        this.performTwitterShareWithData(shareData.imageData, shareData.text);
-                    }
-                    
-                    // 清理URL参数
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                } else if (authStatus === 'failed') {
-                    this.showError('Twitter authentication failed. Please try again.');
-                    localStorage.removeItem('pendingTwitterShare');
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-            }
-            
-            async performTwitterShare() {
-                if (!this.currentFortune) {
-                    this.showError('No fortune to share!');
-                    return;
-                }
-                
-                try {
-                    // 确保html2canvas已加载
-                    if (typeof html2canvas === 'undefined') {
-                        await this.loadHtml2Canvas();
-                    }
-                    
-                    // 生成截图
-                    const canvas = await html2canvas(document.body, {
-                        backgroundColor: '#f0f8ff',
-                        scale: 2,
-                        useCORS: true
-                    });
-                    
-                    const imageData = canvas.toDataURL('image/png');
-                    const text = `🦛 Hippo Fortune: "${this.currentFortune}" \n\n#HippoWisdom #Fortune #AI`;
-                    
-                    // 尝试分享
-                    const response = await fetch('/api/share/twitter', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            imageData: imageData,
-                            text: text
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (response.ok && result.success) {
-                        this.showScreenshotToast('Successfully shared to Twitter! 🐦');
-                    } else if (response.status === 401 && result.needsAuth) {
-                        // 需要认证，保存分享数据并重定向
-                        const shareData = {
-                            imageData: imageData,
-                            text: text,
-                            fortune: this.currentFortune
-                        };
-                        localStorage.setItem('pendingTwitterShare', JSON.stringify(shareData));
-                        
-                        // 重定向到Twitter认证
-                        window.location.href = result.authUrl;
-                    } else {
-                        this.showError(result.error || 'Failed to share to Twitter');
-                    }
-                    
-                } catch (error) {
-                    console.error('Error sharing to Twitter:', error);
-                    this.showError('Failed to share to Twitter. Please try again.');
-                }
-            }
-            
             async performTwitterShareWithData(imageData, text) {
                 try {
                     const response = await fetch('/api/share/twitter', {
@@ -560,7 +504,6 @@
                     };
                     
                     this.recognition.onerror = (event) => {
-                        //this.showError('Speech recognition error. Please try again.');
                         this.stopRecording();
                     };
                     
@@ -575,6 +518,7 @@
             bindEvents() {
                 const voiceButton = document.getElementById('voiceButton');
                 const playButton = document.getElementById('playButton');
+                const downloadButton = document.getElementById('downloadButton');
                 const starRating = document.getElementById('starRating');
                 
                 voiceButton.addEventListener('click', () => {
@@ -589,12 +533,13 @@
                     this.playFortune();
                 });
                 
+                downloadButton.addEventListener('click', () => {
+                    this.downloadScreenshot();
+                });
+                
                 // 星级评分事件绑定
                 this.bindRatingEvents();
             }
-            
-            // 删除这里的重复函数（第521-595行）
-            // async shareToX() { ... }
             
             // 新增：动态加载html2canvas库
             loadHtml2Canvas() {
@@ -607,8 +552,97 @@
                 });
             }
             
-            // 新增：显示截图提示
-            // 修复showScreenshotToast函数
+            // 新增：下载截图功能
+            async downloadScreenshot() {
+                const downloadButton = document.getElementById('downloadButton');
+                downloadButton.classList.add('loading');
+                downloadButton.innerHTML = '⏳';
+                
+                try {
+                    // 确保html2canvas已加载
+                    if (typeof html2canvas === 'undefined') {
+                        await this.loadHtml2Canvas();
+                    }
+                    
+                    // 使用更高的scale获取高清截图
+                    const originalCanvas = await html2canvas(document.body, {
+                        backgroundColor: '#ebd3b5',
+                        scale: 2,  // 提高到2倍分辨率
+                        useCORS: true,
+                        allowTaint: true,
+                        scrollX: 0,
+                        scrollY: 0,
+                        logging: false,
+                        imageTimeout: 15000,
+                        removeContainer: true
+                    });
+                    
+                    // 创建高分辨率的手机尺寸canvas
+                    const mobileCanvas = document.createElement('canvas');
+                    mobileCanvas.width = 750;  // 2倍分辨率 (375 * 2)
+                    mobileCanvas.height = 1624; // 2倍分辨率 (812 * 2)
+                    const ctx = mobileCanvas.getContext('2d');
+                    
+                    // 启用图像平滑以获得更好的质量
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    
+                    // 设置背景色
+                    ctx.fillStyle = '#ebd3b5';
+                    ctx.fillRect(0, 0, 750, 1624);
+                    
+                    // 计算裁剪区域，从原图中心裁剪出手机比例的内容
+                    const sourceWidth = originalCanvas.width;
+                    const sourceHeight = originalCanvas.height;
+                    const targetRatio = 750 / 1624; // 目标宽高比
+                    const sourceRatio = sourceWidth / sourceHeight; // 原图宽高比
+                    
+                    let cropWidth, cropHeight, cropX, cropY;
+                    
+                    if (sourceRatio > targetRatio) {
+                        // 原图更宽，按高度裁剪
+                        cropHeight = sourceHeight;
+                        cropWidth = sourceHeight * targetRatio;
+                        cropX = (sourceWidth - cropWidth) / 2;
+                        cropY = 0;
+                    } else {
+                        // 原图更高，按宽度裁剪
+                        cropWidth = sourceWidth;
+                        cropHeight = sourceWidth / targetRatio;
+                        cropX = 0;
+                        cropY = (sourceHeight - cropHeight) / 2;
+                    }
+                    
+                    // 将裁剪后的内容绘制到高分辨率canvas上
+                    ctx.drawImage(
+                        originalCanvas,
+                        cropX, cropY, cropWidth, cropHeight,  // 源图裁剪区域
+                        0, 0, 750, 1624  // 目标区域（2倍分辨率）
+                    );
+                    
+                    // 创建下载链接，使用更高的图片质量
+                    const link = document.createElement('a');
+                    link.download = `hippo-fortune-hd-${new Date().getTime()}.png`;
+                    link.href = mobileCanvas.toDataURL('image/png', 1.0);  // 最高质量
+                    
+                    // 触发下载
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    // 显示成功提示
+                    this.showScreenshotToast('📱 高清截图已保存！');
+                    
+                } catch (error) {
+                    console.error('截图下载失败:', error);
+                    this.showScreenshotToast('❌ 截图失败，请重试');
+                } finally {
+                    downloadButton.innerHTML = '📥';
+                    downloadButton.classList.remove('loading');
+                }
+            }
+            
+            // 显示截图提示
             showScreenshotToast(message) {
                 const toast = document.getElementById('screenshotToast');
                 if (message) {
@@ -733,7 +767,6 @@
                     this.getFortune();
                 } else {
                     this.getFortune();
-                    //this.showError('The hippo only responds to "emmm". Try saying it!');
                 }
             }
             
@@ -833,7 +866,7 @@
                 document.getElementById('fortuneResult').style.display = 'block';
                 this.hideLoading();
                 this.hideError();
-                // 新增：重置星级评分
+                // 重置星级评分
                 this.resetRating();
             }
             
